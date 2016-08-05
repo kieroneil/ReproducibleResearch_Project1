@@ -1,0 +1,192 @@
+---
+title: "Reproducible Research - Project 1"
+author: "Kier O'Neil"
+date: "August 3, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Objective
+Analyse and answer various questions about the activity dataset which reports a person's steps every five minutes over the course of a day.  
+Each day has 288 records.  
+## Load Libraries
+```{r}
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(rpart)
+library(lubridate)
+```
+
+## 1. Code for reading in the dataset and/or processing the data
+Get raw data
+
+```{r activity_raw}
+activity_raw <- read_csv("activity.csv")
+```
+
+## Initial Findings  
+This query shows that there are several days with all NA values. Since one of the days is the very first date and one is the very last date, they will be trimmed from the final data set as they are not representative of the rest of the data set.  
+
+```{r}
+range(activity_raw$date)
+
+activity_raw %>%
+    group_by(date) %>%
+    filter(is.na(steps)) %>%
+    summarise(num_of_na = length(steps))
+```
+The second issue is with the 2nd day, 2012-10-02.  It contains all zeros except for two entries. 
+```{r}
+b <- activity_raw %>%
+    filter(date == ymd("2012-10-02"))
+    
+c <- b %>%
+    filter(steps == 0)
+
+dim(b)
+dim(c)
+```
+
+We can see that 286 of the 288 records for 2012-10-02 has a value of zero, which may indicate the the subject was not wearing the device for most of the day.
+
+For these reasons 2012-10-01, 2012-10-02 & 2012-11-30 will be omitted from the analysis test set.
+
+```{r}
+ar_trimmed <- activity_raw %>%
+    filter(date >= ymd("2012-10-03"), date < ymd("2012-11-30"))
+```
+
+Part of the assignment is to impute NA values.  Let's make sure that we still have a few NAs to work with.
+```{r}
+ar_trimmed %>%
+    filter(is.na(steps))
+```
+There are still 1,728  NAs that can be imputed 
+horizontal rule
+
+## Days with NAs
+This shows the days that still have NAs.  
+*Note that NAs occur during an entire day,
+There are no days with just a few NA records*  
+```{r ar_trimmed}
+ar_trimmed %>%
+    group_by(date) %>%
+    filter(is.na(steps)) %>%
+    summarise(num_of_na = length(steps))
+```
+
+## Remove unneeded variables
+```{r}
+rm(b, c)
+```
+
+# Create Dataset with With NAs removed
+This dataset removes all records with NAs, not just the first and last days.  
+```{r}
+ar_na_omit <- na.omit(ar_trimmed)
+```
+
+## Summarise total number of steps taken per day
+```{r total_steps_na_omit}
+total_steps_na_omit <- ar_na_omit %>%
+    select(date, interval, steps) %>%
+    group_by(date) %>%
+    summarise(total_steps = sum(steps))
+```
+## 2. Histogram of the total number of steps taken each day
+### NAs omitted
+```{r}
+ggplot(total_steps_na_omit, aes(total_steps)) + geom_histogram(bins = 15)
+```
+
+## 3. Mean and median number of steps taken each day
+Calculate and report the mean and median of the total number of steps taken per day with NA records omitted.  
+```{r}
+mean(total_steps_na_omit$total_steps)
+median(total_steps_na_omit$total_steps)
+```
+
+## 4. Time series plot of the average number of steps taken
+## 5. The 5-minute interval that, on average, contains the maximum number of steps
+Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis).  
+Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?  
+*NOTE:  This dataset omits all NAs*
+
+```{r}
+average_per_interval <- ar_na_omit %>%
+    select(date, interval, steps) %>%
+    group_by(interval) %>%
+    summarise(average_per_5_minutes = mean(steps))
+```
+
+Determine the interval with the maximum average steps
+```{r}
+max_interval <- average_per_interval %>%
+    filter(average_per_5_minutes == max(average_per_5_minutes))
+
+max_interval <- max_interval[1]
+max_interval
+
+ggplot(average_per_interval, aes(interval, average_per_5_minutes)) + geom_line() +
+    geom_vline(aes(xintercept = max_interval), colour = "red") +
+    annotate("text", x=1500, y = 175, label = "Interval with highest average steps",
+             colour = "red")
+```
+
+# Create dataset with NAs imputed by a formula  
+## 6. Code to describe and show a strategy for imputing missing data  
+
+### Strategy for imputing NA values:  
+To impute the values of the NAs in 'steps' I decided to use a the rpart library which uses recursive partitioning.  I like it because it can impute the value based on any number of parameters even though this case only derives it based on the interval that it occurs in.  
+
+Start with the trimmed raw data set
+```{r}
+ar_imputed <- ar_trimmed 
+```
+
+Impute the missing 'steps' using rpart
+```{r}
+library(rpart)
+
+# Create prediction formula
+predicted_steps <- rpart(steps ~ interval, data = ar_imputed[!is.na(ar_imputed$steps),], 
+                         method = "anova")
+
+# Apply prediction to ar_imputed NA records
+ar_imputed$steps[is.na(ar_imputed$steps)] <- predict(predicted_steps, 
+                                                     ar_imputed[is.na(ar_imputed$steps),])
+
+# Summarise total number of steps taken per day
+total_steps_imputed <- ar_imputed %>%
+    select(date, interval, steps) %>%
+    group_by(date) %>%
+    summarise(total_steps = sum(steps))
+
+# Calculate mean steps per day
+mean(total_steps_imputed$total_steps)
+median(total_steps_imputed$total_steps)
+```
+## 7. Histogram of the total number of steps taken each day after  missing values are imputed.
+```{r}
+ggplot(total_steps_imputed, aes(total_steps)) + geom_histogram(bins = 15)
+```
+
+## 8. Panel plot comparing the average number of steps taken per 5-minute interval across weekdays and weekends.
+
+Create the is_weekday column in ar_imputed
+```{r}
+is_weekday <- !(weekdays(as.Date(ar_imputed$date)) %in% c('Saturday','Sunday'))
+ar_imputed_days <- cbind(is_weekday, ar_imputed)
+ar_imputed_days$is_weekday <- is_weekday
+
+total_steps_days <- ar_imputed_days %>%
+    group_by(is_weekday, interval) %>%
+    summarise(average_steps = mean(steps))
+    
+p <- ggplot(total_steps_days, aes(interval, average_steps)) +geom_line()
+p + facet_wrap(~is_weekday, ncol=2, labeller = "label_both")
+```
+
