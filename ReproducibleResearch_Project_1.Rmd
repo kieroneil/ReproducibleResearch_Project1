@@ -23,7 +23,7 @@ library(lubridate)
 ## 1. Code for reading in the dataset and/or processing the data
 Get raw data
 
-```{r activity_raw}
+```{r}
 activity_raw <- read_csv("activity.csv")
 ```
 
@@ -90,7 +90,7 @@ ar_na_omit <- na.omit(ar_trimmed)
 ```
 
 ## Summarise total number of steps taken per day
-```{r total_steps_na_omit}
+```{r}
 total_steps_na_omit <- ar_na_omit %>%
     select(date, interval, steps) %>%
     group_by(date) %>%
@@ -98,7 +98,7 @@ total_steps_na_omit <- ar_na_omit %>%
 ```
 ## 2. Histogram of the total number of steps taken each day
 ### NAs omitted
-```{r}
+```{r eval=TRUE}
 ggplot(total_steps_na_omit, aes(total_steps)) + geom_histogram(bins = 15)
 ```
 
@@ -123,7 +123,7 @@ average_per_interval <- ar_na_omit %>%
 ```
 
 Determine the interval with the maximum average steps
-```{r}
+```{r eval=TRUE}
 max_interval <- average_per_interval %>%
     filter(average_per_5_minutes == max(average_per_5_minutes))
 
@@ -170,14 +170,14 @@ mean(total_steps_imputed$total_steps)
 median(total_steps_imputed$total_steps)
 ```
 ## 7. Histogram of the total number of steps taken each day after  missing values are imputed.
-```{r}
+```{r eval=TRUE}
 ggplot(total_steps_imputed, aes(total_steps)) + geom_histogram(bins = 15)
 ```
 
 ## 8. Panel plot comparing the average number of steps taken per 5-minute interval across weekdays and weekends.
 
 Create the is_weekday column in ar_imputed
-```{r}
+```{r eval=TRUE}
 is_weekday <- !(weekdays(as.Date(ar_imputed$date)) %in% c('Saturday','Sunday'))
 ar_imputed_days <- cbind(is_weekday, ar_imputed)
 ar_imputed_days$is_weekday <- is_weekday
